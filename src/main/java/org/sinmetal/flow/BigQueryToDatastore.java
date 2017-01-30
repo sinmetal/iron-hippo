@@ -27,7 +27,7 @@ import com.google.datastore.v1.Value;
 
 public class BigQueryToDatastore {
 
-	private static final String PROJECT_ID = "cp300demo1";
+	private static final String PROJECT_ID = "cpb101demo1";
 	private static final Logger LOG = LoggerFactory.getLogger(BigQueryToDatastore.class);
 
 	static class GroupKeywords extends PTransform<PCollection<TableRow>, PCollection<KV<Integer, Iterable<TableRow>>>> {
@@ -85,7 +85,6 @@ public class BigQueryToDatastore {
 			Key key = Key.newBuilder()
 					.addPath(PathElement.newBuilder().setKind("UtteranceTest").setId(content.getKey())).build();
 
-			int characterCount = 0;
 			String keyword = "";
 			List<Value> list = new ArrayList<>();
 			for (TableRow row : content.getValue()) {
@@ -97,14 +96,10 @@ public class BigQueryToDatastore {
 				if (keyword.equals(row.get("keyword")) == false) {
 					keyword = word;
 				}
-				int len = utterance.length();
-				// 200000
-				if (characterCount + len > 200000) {
-					LOG.info("Truncated the text. Length = " + characterCount + "keyword_id = " + content.getKey()
-							+ ", keyword = " + word);
+				if (list.size() > 1000) {
+					LOG.info("Truncated the text." + "keyword_id = " + content.getKey() + ", keyword = " + word);
 					break;
 				}
-				characterCount += len;
 				list.add(Value.newBuilder().setStringValue(utterance).build());
 			}
 
