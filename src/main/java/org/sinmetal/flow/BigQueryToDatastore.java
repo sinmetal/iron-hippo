@@ -12,7 +12,11 @@ import com.google.api.services.bigquery.model.TableRow;
 import com.google.cloud.dataflow.sdk.Pipeline;
 import com.google.cloud.dataflow.sdk.io.BigQueryIO;
 import com.google.cloud.dataflow.sdk.io.datastore.DatastoreIO;
+import com.google.cloud.dataflow.sdk.options.Default;
+import com.google.cloud.dataflow.sdk.options.Description;
+import com.google.cloud.dataflow.sdk.options.PipelineOptions;
 import com.google.cloud.dataflow.sdk.options.PipelineOptionsFactory;
+import com.google.cloud.dataflow.sdk.options.ValueProvider;
 import com.google.cloud.dataflow.sdk.transforms.DoFn;
 import com.google.cloud.dataflow.sdk.transforms.GroupByKey;
 import com.google.cloud.dataflow.sdk.transforms.PTransform;
@@ -27,7 +31,6 @@ import com.google.datastore.v1.Value;
 
 public class BigQueryToDatastore {
 
-	private static final String PROJECT_ID = "cpb101demo1";
 	private static final Logger LOG = LoggerFactory.getLogger(BigQueryToDatastore.class);
 
 	static class GroupKeywords extends PTransform<PCollection<TableRow>, PCollection<KV<Integer, Iterable<TableRow>>>> {
@@ -123,15 +126,38 @@ public class BigQueryToDatastore {
 		}
 	}
 
+	public interface BigQueryToDatastoreOptions extends PipelineOptions {
+
+		@Description("Path of the bigquery table to read from")
+		@Default.String("cpb101demo1:samples.table")
+		ValueProvider<String> getInputTable();
+
+		@Description("Output destination Datastore ProjectID")
+		@Default.String("cpb101demo1")
+		ValueProvider<String> getOutputProjectID();
+
+		void setInputTable(ValueProvider<String> value);
+
+		void setOutputProjectID(ValueProvider<String> value);
+	}
+
 	public static void main(String[] args) {
-		Pipeline p = Pipeline.create(PipelineOptionsFactory.fromArgs(args).withValidation().create());
+		BigQueryToDatastoreOptions options = PipelineOptionsFactory.fromArgs(args).withValidation()
+				.as(BigQueryToDatastoreOptions.class);
+
+		String inputTable = options.getInputTable().get();
+		String projectID = options.getOutputProjectID().get();
+		
+		LOG.info("Input Table : " + inputTable);
+		LOG.info("ProjectID : " + projectID);
+		
+		Pipeline p = Pipeline.create(options);
 
 		PCollection<KV<Integer, Iterable<TableRow>>> keywordGroups = p
-				.apply(BigQueryIO.Read.named("ReadUtterance").from("topgate-ai-dev:dialog.utterance_llte50"))
-				.apply(new GroupKeywords());
+				.apply(BigQueryIO.Read.named("ReadUtterance").from(inputTable)).apply(new GroupKeywords());
 
 		PCollection<Entity> entities = keywordGroups.apply(new CreateEntities());
-		entities.apply(DatastoreIO.v1().write().withProjectId(PROJECT_ID));
+		entities.apply(DatastoreIO.v1().write().withProjectId(projectID));
 
 		p.run();
 	}
