@@ -1,0 +1,9 @@
+application: cpb101demo1
+version: dataflow
+runtime: go
+api_version: go1
+
+handlers:
+- url: /.*
+  login: admin
+  script: _go_app
