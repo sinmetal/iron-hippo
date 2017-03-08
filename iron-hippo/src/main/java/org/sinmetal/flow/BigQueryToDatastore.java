@@ -73,10 +73,19 @@ public class BigQueryToDatastore {
 
 	static class CreateEntities extends PTransform<PCollection<KV<Integer, Iterable<TableRow>>>, PCollection<Entity>> {
 
+		String kind = "";
+
+		public void setKind(String kind){
+			this.kind = kind;
+		}
+
 		@Override
 		public PCollection<Entity> apply(PCollection<KV<Integer, Iterable<TableRow>>> input) {
 
-			PCollection<Entity> entities = input.apply(ParDo.of(new CreateEntityFn()));
+			CreateEntityFn f = new CreateEntityFn();
+			f.setKind(this.kind);
+			
+			PCollection<Entity> entities = input.apply(ParDo.of(f));
 
 			return entities;
 		}
@@ -84,9 +93,17 @@ public class BigQueryToDatastore {
 	}
 
 	static class CreateEntityFn extends DoFn<KV<Integer, Iterable<TableRow>>, Entity> {
+		
+		String kind = "";
+
+		public void setKind(String kind) {
+			this.kind = kind;
+		}
+		
 		public Entity makeEntity(KV<Integer, Iterable<TableRow>> content) {
+
 			Key key = Key.newBuilder()
-					.addPath(PathElement.newBuilder().setKind("UtteranceTest").setId(content.getKey())).build();
+					.addPath(PathElement.newBuilder().setKind(this.kind).setId(content.getKey())).build();
 
 			String keyword = "";
 			List<Value> list = new ArrayList<>();
@@ -136,9 +153,15 @@ public class BigQueryToDatastore {
 		@Default.String("cpb101demo1")
 		ValueProvider<String> getOutputProjectID();
 
+		@Description("Output destination Datastore Kind")
+		@Default.String("hogeKind")
+		ValueProvider<String> getOutputKind();
+
 		void setInputTable(ValueProvider<String> value);
 
 		void setOutputProjectID(ValueProvider<String> value);
+
+		void setOutputKind(ValueProvider<String> value);
 	}
 
 	public static void main(String[] args) {
@@ -147,16 +170,21 @@ public class BigQueryToDatastore {
 
 		String inputTable = options.getInputTable().get();
 		String projectID = options.getOutputProjectID().get();
-		
-		LOG.info("Input Table : " + inputTable);
+		String kind = options.getOutputKind().get();
+
+		LOG.info("Input_Table : " + inputTable);
 		LOG.info("ProjectID : " + projectID);
-		
+		LOG.info("Kind : " + kind);
+
 		Pipeline p = Pipeline.create(options);
 
 		PCollection<KV<Integer, Iterable<TableRow>>> keywordGroups = p
 				.apply(BigQueryIO.Read.named("ReadUtterance").from(inputTable)).apply(new GroupKeywords());
-
-		PCollection<Entity> entities = keywordGroups.apply(new CreateEntities());
+		
+		CreateEntities createEntities = new CreateEntities();
+		createEntities.setKind(kind);
+		
+		PCollection<Entity> entities = keywordGroups.apply(createEntities);
 		entities.apply(DatastoreIO.v1().write().withProjectId(projectID));
 
 		p.run();
